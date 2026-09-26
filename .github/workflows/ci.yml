@@ -1,0 +1,64 @@
+name: CI - Pruebas automatizadas
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Pruebas unitarias
+        run: npm run test:unit
+
+      - name: Pruebas end-to-end
+        run: |
+          npx playwright install --with-deps
+          npm run test:e2e
+
+      - name: Publicar reportes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reportes-pruebas
+          path: |
+            junit.xml
+            resultados-e2e.xml
+            coverage/
+            playwright-report/
+
+      - name: Notificar resultados por correo
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          from: GitHub CI <${{ secrets.MAIL_USERNAME }}>
+          to: ${{ secrets.MAIL_USERNAME }}
+          subject: "[${{ job.status }}] ${{ github.repository }} - ${{ github.ref_name }}"
+          body: |
+            Resultado del pipeline: ${{ job.status }}
+            Rama: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            Autor: ${{ github.actor }}
+
+            Ver detalles y descargar reportes:
+            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          attachments: junit.xml,resultados-e2e.xml
